@@ -1,0 +1,252 @@
+@import 'tailwindcss';
+@import '@fontsource-variable/inter';
+
+/* Dark mode is driven by a class on <html>, set before first paint. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Design tokens.
+ *
+ * Two layers: raw values that flip with the theme (below), and the Tailwind
+ * theme mapping (`@theme inline`) that turns them into utilities. Components
+ * only ever reference the semantic names — never a hex value.
+ */
+:root {
+  color-scheme: light;
+
+  --ink-canvas: #fafaf9;
+  --ink-surface: #ffffff;
+  --ink-surface-muted: #f5f5f4;
+  --ink-surface-raised: #ffffff;
+  --ink-border: #e7e5e1;
+  --ink-border-strong: #d6d3cd;
+  --ink-text: #1c1b19;
+  --ink-text-muted: #6d6a64;
+  --ink-text-subtle: #96938c;
+  --ink-accent: #0f6b52;
+  --ink-accent-soft: #e6f2ee;
+  --ink-accent-text: #0b5541;
+  --ink-positive: #0f6b52;
+  --ink-positive-soft: #e6f2ee;
+  --ink-negative: #ad3b28;
+  --ink-negative-soft: #fbece9;
+  --ink-warning: #9a6a06;
+  --ink-warning-soft: #fbf1de;
+  --ink-focus: #0f6b52;
+
+  --ink-viz-1: #0f6b52;
+  --ink-viz-2: #2f6f9e;
+  --ink-viz-3: #a4562a;
+  --ink-viz-4: #6b5ea8;
+  --ink-viz-5: #1f7d78;
+  --ink-viz-6: #8a6a1f;
+  --ink-viz-7: #a03f63;
+  --ink-viz-8: #3f6b3a;
+  --ink-viz-9: #7a4b8f;
+  --ink-viz-10: #b5622c;
+  --ink-viz-11: #35607a;
+  --ink-viz-neutral: #8c8983;
+
+  --ink-shadow-card: 0 1px 2px rgb(24 23 20 / 0.04), 0 1px 3px rgb(24 23 20 / 0.03);
+  --ink-shadow-pop: 0 12px 32px -8px rgb(24 23 20 / 0.18), 0 2px 8px rgb(24 23 20 / 0.06);
+}
+
+.dark {
+  color-scheme: dark;
+
+  --ink-canvas: #0c0c0e;
+  --ink-surface: #141416;
+  --ink-surface-muted: #1a1a1d;
+  --ink-surface-raised: #18181b;
+  --ink-border: #272729;
+  --ink-border-strong: #37373b;
+  --ink-text: #ededef;
+  --ink-text-muted: #a1a1a8;
+  --ink-text-subtle: #7b7b83;
+  --ink-accent: #46bd94;
+  --ink-accent-soft: #10261f;
+  --ink-accent-text: #6ed3ae;
+  --ink-positive: #46bd94;
+  --ink-positive-soft: #10261f;
+  --ink-negative: #f0796a;
+  --ink-negative-soft: #2a1512;
+  --ink-warning: #d9a441;
+  --ink-warning-soft: #251c0d;
+  --ink-focus: #46bd94;
+
+  --ink-viz-1: #46bd94;
+  --ink-viz-2: #5fa4de;
+  --ink-viz-3: #e08a52;
+  --ink-viz-4: #9d90e0;
+  --ink-viz-5: #4fbdb6;
+  --ink-viz-6: #cfa63f;
+  --ink-viz-7: #e0709b;
+  --ink-viz-8: #7cb877;
+  --ink-viz-9: #b487cd;
+  --ink-viz-10: #e8955b;
+  --ink-viz-11: #6aa8c9;
+  --ink-viz-neutral: #85858c;
+
+  --ink-shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
+  --ink-shadow-pop: 0 16px 40px -10px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
+}
+
+@theme inline {
+  --font-sans: 'Inter Variable', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --color-canvas: var(--ink-canvas);
+  --color-surface: var(--ink-surface);
+  --color-surface-muted: var(--ink-surface-muted);
+  --color-surface-raised: var(--ink-surface-raised);
+  --color-line: var(--ink-border);
+  --color-line-strong: var(--ink-border-strong);
+  --color-ink: var(--ink-text);
+  --color-muted: var(--ink-text-muted);
+  --color-subtle: var(--ink-text-subtle);
+  --color-accent: var(--ink-accent);
+  --color-accent-soft: var(--ink-accent-soft);
+  --color-accent-text: var(--ink-accent-text);
+  --color-positive: var(--ink-positive);
+  --color-positive-soft: var(--ink-positive-soft);
+  --color-negative: var(--ink-negative);
+  --color-negative-soft: var(--ink-negative-soft);
+  --color-warning: var(--ink-warning);
+  --color-warning-soft: var(--ink-warning-soft);
+
+  --color-viz-1: var(--ink-viz-1);
+  --color-viz-2: var(--ink-viz-2);
+  --color-viz-3: var(--ink-viz-3);
+  --color-viz-4: var(--ink-viz-4);
+  --color-viz-5: var(--ink-viz-5);
+  --color-viz-6: var(--ink-viz-6);
+  --color-viz-7: var(--ink-viz-7);
+  --color-viz-8: var(--ink-viz-8);
+  --color-viz-9: var(--ink-viz-9);
+  --color-viz-10: var(--ink-viz-10);
+  --color-viz-11: var(--ink-viz-11);
+  --color-viz-neutral: var(--ink-viz-neutral);
+
+  --shadow-card: var(--ink-shadow-card);
+  --shadow-pop: var(--ink-shadow-pop);
+
+  --radius-card: 0.625rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--ink-border);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--ink-canvas);
+    color: var(--ink-text);
+    font-family: var(--font-sans);
+    font-synthesis-weight: none;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    font-feature-settings: 'cv05' 1, 'ss01' 1;
+    /* The shell owns scrolling; this stops any child forcing sideways scroll. */
+    overflow-x: hidden;
+  }
+
+  /* One visible focus treatment everywhere, never removed. */
+  :focus-visible {
+    outline: 2px solid var(--ink-focus);
+    outline-offset: 2px;
+    border-radius: 4px;
+  }
+
+  /* Numbers line up in columns; money is always tabular. */
+  .tnum,
+  table,
+  input[type='number'] {
+    font-variant-numeric: tabular-nums;
+    font-feature-settings: 'tnum' 1;
+  }
+
+  ::selection {
+    background: var(--ink-accent-soft);
+    color: var(--ink-accent-text);
+  }
+
+  /* Native date/time indicators are near-invisible on dark surfaces. */
+  .dark input[type='date']::-webkit-calendar-picker-indicator,
+  .dark input[type='month']::-webkit-calendar-picker-indicator {
+    filter: invert(0.8);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: var(--ink-border-strong) transparent;
+  }
+
+  /* Skip link: off-screen until focused. */
+  .skip-link:not(:focus) {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+
+  @keyframes ledger-fade-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes ledger-rise {
+    from {
+      opacity: 0;
+      transform: translateY(6px) scale(0.985);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+
+  @keyframes ledger-slide-up {
+    from {
+      opacity: 0;
+      transform: translateY(12px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .animate-fade-in {
+    animation: ledger-fade-in 160ms ease-out;
+  }
+
+  .animate-rise {
+    animation: ledger-rise 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .animate-slide-up {
+    animation: ledger-slide-up 220ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+}

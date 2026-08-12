@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="24" height="24" role="img" aria-label="Ledger">
+  <!-- Maskable: artwork stays inside the safe zone so platform masks cannot crop it. -->
+  <rect width="24" height="24" fill="#2f6f5e" />
+  <path d="M9 9v6h6" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+  <path d="M11 13.3 12.8 11.5l1.5 1.5L16 10.2" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" fill="none" opacity="0.75" />
+</svg>

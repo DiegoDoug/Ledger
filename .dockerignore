@@ -1,0 +1,28 @@
+# Keep the build context small and never ship local state into the image.
+node_modules
+dist
+.git
+.gitignore
+*.tsbuildinfo
+
+# Local environment and editor state
+.env
+.env.*
+!.env.example
+.claude
+.vscode
+.idea
+.DS_Store
+
+# Docs and CI are not needed to build the bundle
+README.md
+LICENSE
+*.md
+.github
+
+# Anything a host build may have left behind
+coverage
+npm-debug.log*
+yarn-error.log*
+pnpm-lock.yaml
+yarn.lock

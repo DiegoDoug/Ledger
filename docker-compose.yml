@@ -1,0 +1,60 @@
+# Ledger — self-hosted with Docker Compose.
+#
+#   docker compose up -d --build
+#
+# Then open http://localhost:8080 (or whatever LEDGER_PORT is set to).
+# Copy .env.example to .env to change the published port or bind address.
+
+services:
+  ledger:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ledger:latest
+    container_name: ledger
+    restart: unless-stopped
+
+    # Published as <bind address>:<host port> -> <container port>. Defaults to
+    # every interface so a LAN device can reach it; set LEDGER_BIND=127.0.0.1 to
+    # keep it on the host only, e.g. when a reverse proxy sits in front.
+    ports:
+      - '${LEDGER_BIND:-0.0.0.0}:${LEDGER_PORT:-8080}:8080'
+
+    environment:
+      # The port nginx listens on inside the container. Change the published
+      # port with LEDGER_PORT instead of this.
+      PORT: 8080
+
+    # The image serves static files and writes nothing but nginx's own scratch
+    # space, so the filesystem can be read-only. The three tmpfs mounts are what
+    # nginx genuinely needs: its cache, its pid file, and the conf.d directory
+    # that the base image's entrypoint renders the config template into.
+    read_only: true
+    tmpfs:
+      - /var/cache/nginx:mode=1777
+      - /var/run:mode=1777
+      - /etc/nginx/conf.d:mode=1777
+      - /tmp:mode=1777
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      # nginx needs this only to write its own log files as an unprivileged user.
+      - CHOWN
+      - DAC_OVERRIDE
+      - SETGID
+      - SETUID
+
+    healthcheck:
+      test: ['CMD-SHELL', 'wget --quiet --tries=1 --spider http://127.0.0.1:8080/healthz || exit 1']
+      interval: 30s
+      timeout: 3s
+      start_period: 5s
+      retries: 3
+
+    logging:
+      driver: json-file
+      options:
+        max-size: '10m'
+        max-file: '3'

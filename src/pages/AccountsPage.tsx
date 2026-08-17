@@ -6,6 +6,7 @@ import { Button } from '../components/ui/Button'
 import { Field, Input, Select, Textarea } from '../components/ui/Field'
 import { ConfirmDialog, Modal } from '../components/ui/Modal'
 import { Badge, EmptyState } from '../components/ui/Primitives'
+import { Disclosure } from '../components/ui/Disclosure'
 import { Menu } from '../components/ui/Menu'
 import { StatCard } from '../components/StatCard'
 import { useLedger } from '../data/store'
@@ -32,6 +33,8 @@ const ACCOUNT_TYPE_HINTS: Record<AccountType, string> = {
   credit: 'A negative balance is money owed and counts as a liability',
   cash: 'Physical money',
   investment: 'Contributions are tracked; market movement is not',
+  prepaid: 'A card loaded with its own balance, not linked to credit',
+  virtual: 'A card number issued for online or single-merchant use',
   other: 'Anything else',
 }
 
@@ -61,6 +64,129 @@ export function AccountsPage() {
     () => netWorth(data.accounts, data.transactions),
     [data.accounts, data.transactions],
   )
+
+  const accountMetas = data.accounts.map((account) => {
+    const month = accountActivity(monthly, account.id)
+    return {
+      account,
+      balance: balances.get(account.id) ?? 0,
+      month,
+      count: accountActivity(data.transactions, account.id).count,
+      liability: isLiabilityAccount(account.type),
+      // Dormant this month, not dormant forever — an account with history
+      // that simply had no activity this period, so it stops competing
+      // visually with the ones that did.
+      dormant: month.count === 0,
+    }
+  })
+  const liveAccounts = accountMetas.filter((m) => !m.dormant)
+  const dormantAccounts = accountMetas.filter((m) => m.dormant)
+
+  function renderAccountCard({
+    account,
+    balance,
+    month,
+    count,
+    liability,
+    dormant,
+  }: (typeof accountMetas)[number]) {
+    return (
+      <Card key={account.id} className="flex flex-col">
+        <CardHeader
+          title={
+            <span className="flex items-center gap-2">
+              {account.name}
+              {account.archived ? <Badge tone="warning">Archived</Badge> : null}
+            </span>
+          }
+          description={account.institution}
+          actions={
+            <Menu
+              label={`Actions for ${account.name}`}
+              items={[
+                {
+                  label: 'Add transaction',
+                  onSelect: () => ui.newTransaction({ accountId: account.id }),
+                },
+                {
+                  label: 'View transactions',
+                  onSelect: () => navigate(`/transactions?account=${account.id}`),
+                },
+                { label: 'Edit account', onSelect: () => setEditing(account) },
+                {
+                  label: account.archived ? 'Unarchive' : 'Archive',
+                  onSelect: () => {
+                    actions.updateAccount(account.id, { archived: !account.archived })
+                    toast({
+                      message: account.archived
+                        ? `${account.name} is active again.`
+                        : `${account.name} archived — it no longer counts towards your balance.`,
+                      action: { label: 'Undo', onClick: actions.undo },
+                    })
+                  },
+                },
+                {
+                  label: 'Delete',
+                  destructive: true,
+                  onSelect: () => setPendingDelete(account),
+                },
+              ]}
+            />
+          }
+        />
+        <CardBody className="flex-1">
+          <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+            <span className="flex flex-wrap items-center gap-1.5">
+              <Badge tone="neutral">{ACCOUNT_TYPE_LABELS[account.type]}</Badge>
+              {liability ? <Badge tone="neutral">Liability</Badge> : null}
+            </span>
+            <p
+              className={cn(
+                'tnum text-[19px] font-semibold tracking-[-0.02em]',
+                balance < 0 ? 'text-negative' : dormant ? 'text-dormant-text' : 'text-ink',
+              )}
+            >
+              {format.money(balance)}
+              <span className="sr-only">{balance < 0 ? ' owed' : ' available'}</span>
+            </p>
+          </div>
+          {liability && balance < 0 ? (
+            <p className="mt-1 text-right text-[11px] text-muted">
+              {format.money(Math.abs(balance))} owed
+            </p>
+          ) : null}
+
+          {dormant ? (
+            <p className="mt-3 border-t border-line pt-3 text-[11px] text-dormant-text">
+              No activity this month
+            </p>
+          ) : (
+            <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3 text-[11px]">
+              <div>
+                <dt className="text-subtle">In this month</dt>
+                <dd className="tnum mt-0.5 font-medium text-positive">
+                  {format.money(month.moneyIn)}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-subtle">Out this month</dt>
+                <dd className="tnum mt-0.5 font-medium text-ink">{format.money(month.moneyOut)}</dd>
+              </div>
+              <div>
+                <dt className="text-subtle">Transactions</dt>
+                <dd className="tnum mt-0.5 font-medium text-ink">{count}</dd>
+              </div>
+            </dl>
+          )}
+          {account.notes ? (
+            <p className="mt-3 border-t border-line pt-3 text-[11px] leading-relaxed text-muted">
+              {account.notes}
+            </p>
+          ) : null}
+        </CardBody>
+      </Card>
+    )
+  }
 
   return (
     <>
@@ -117,109 +243,21 @@ export function AccountsPage() {
           />
         </Card>
       ) : (
-        <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
-          {data.accounts.map((account) => {
-            const balance = balances.get(account.id) ?? 0
-            const month = accountActivity(monthly, account.id)
-            const count = accountActivity(data.transactions, account.id).count
-            const liability = isLiabilityAccount(account.type)
-
-            return (
-              <Card key={account.id} className="flex flex-col">
-                <CardHeader
-                  title={
-                    <span className="flex items-center gap-2">
-                      {account.name}
-                      {account.archived ? <Badge tone="warning">Archived</Badge> : null}
-                    </span>
-                  }
-                  description={account.institution}
-                  actions={
-                    <Menu
-                      label={`Actions for ${account.name}`}
-                      items={[
-                        {
-                          label: 'Add transaction',
-                          onSelect: () => ui.newTransaction({ accountId: account.id }),
-                        },
-                        {
-                          label: 'View transactions',
-                          onSelect: () => navigate(`/transactions?account=${account.id}`),
-                        },
-                        { label: 'Edit account', onSelect: () => setEditing(account) },
-                        {
-                          label: account.archived ? 'Unarchive' : 'Archive',
-                          onSelect: () => {
-                            actions.updateAccount(account.id, { archived: !account.archived })
-                            toast({
-                              message: account.archived
-                                ? `${account.name} is active again.`
-                                : `${account.name} archived — it no longer counts towards your balance.`,
-                              action: { label: 'Undo', onClick: actions.undo },
-                            })
-                          },
-                        },
-                        {
-                          label: 'Delete',
-                          destructive: true,
-                          onSelect: () => setPendingDelete(account),
-                        },
-                      ]}
-                    />
-                  }
-                />
-                <CardBody className="flex-1">
-                  <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                    <span className="flex flex-wrap items-center gap-1.5">
-                      <Badge tone="neutral">{ACCOUNT_TYPE_LABELS[account.type]}</Badge>
-                      {liability ? <Badge tone="neutral">Liability</Badge> : null}
-                    </span>
-                    <p
-                      className={cn(
-                        'tnum text-[19px] font-semibold tracking-[-0.02em]',
-                        balance < 0 ? 'text-negative' : 'text-ink',
-                      )}
-                    >
-                      {format.money(balance)}
-                      <span className="sr-only">
-                        {balance < 0 ? ' owed' : ' available'}
-                      </span>
-                    </p>
-                  </div>
-                  {liability && balance < 0 ? (
-                    <p className="mt-1 text-right text-[11px] text-muted">
-                      {format.money(Math.abs(balance))} owed
-                    </p>
-                  ) : null}
-
-                  <dl className="mt-3 grid grid-cols-3 gap-2 border-t border-line pt-3 text-[11px]">
-                    <div>
-                      <dt className="text-subtle">In this month</dt>
-                      <dd className="tnum mt-0.5 font-medium text-positive">
-                        {format.money(month.moneyIn)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-subtle">Out this month</dt>
-                      <dd className="tnum mt-0.5 font-medium text-ink">
-                        {format.money(month.moneyOut)}
-                      </dd>
-                    </div>
-                    <div>
-                      <dt className="text-subtle">Transactions</dt>
-                      <dd className="tnum mt-0.5 font-medium text-ink">{count}</dd>
-                    </div>
-                  </dl>
-                  {account.notes ? (
-                    <p className="mt-3 border-t border-line pt-3 text-[11px] leading-relaxed text-muted">
-                      {account.notes}
-                    </p>
-                  ) : null}
-                </CardBody>
-              </Card>
-            )
-          })}
-        </div>
+        <>
+          <div className="mt-4 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {liveAccounts.map((meta) => renderAccountCard(meta))}
+          </div>
+          {dormantAccounts.length > 0 ? (
+            <Disclosure
+              label={`${plural(dormantAccounts.length, 'account')} with no activity this month`}
+              className="mt-3"
+            >
+              <div className="mt-2 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+                {dormantAccounts.map((meta) => renderAccountCard(meta))}
+              </div>
+            </Disclosure>
+          ) : null}
+        </>
       )}
 
       {editing !== undefined ? (

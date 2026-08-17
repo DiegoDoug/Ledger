@@ -10,12 +10,13 @@
  * nothing else — not cash flow, not the savings rate, not a category total.
  */
 
-import { monthKey } from './dates'
+import { daysBetween, monthKey } from './dates'
 import { isLiabilityAccount } from './types'
 import type {
   Account,
   Budget,
   Category,
+  IsoDate,
   MonthKey,
   Transaction,
   TransactionType,
@@ -70,6 +71,44 @@ export function savingsRate(income: number, expenses: number): number {
 export function savingsRateFor(transactions: Transaction[]): number {
   const t = totals(transactions)
   return savingsRate(t.income, t.expenses)
+}
+
+/**
+ * A ledger younger than this has too little history for a savings rate to mean
+ * anything — one week of a new account can swing to ±1000% on a single
+ * transaction. Below this floor the UI shows a plain-language notice instead
+ * of the number.
+ */
+export const MIN_RELIABLE_HISTORY_DAYS = 30
+
+/** Income below this (in cents) is too thin a denominator to trust a percentage. */
+export const SAVINGS_RATE_INCOME_FLOOR = 5_000
+
+export type SavingsRateConfidenceReason = 'ok' | 'no-income' | 'low-income' | 'insufficient-history'
+
+export interface SavingsRateConfidence {
+  reliable: boolean
+  reason: SavingsRateConfidenceReason
+}
+
+/**
+ * Whether a computed savings rate is safe to show as a number. `no-income` is
+ * its own reason because "no income yet" is not misleading — the number is
+ * genuinely undefined and callers already render that case as "—". The other
+ * two reasons guard against a technically-correct but practically meaningless
+ * percentage, such as -314% from one week of a €70 paycheck.
+ */
+export function savingsRateConfidence(
+  income: number,
+  earliestTransactionDate: IsoDate | undefined,
+  today: IsoDate,
+): SavingsRateConfidence {
+  if (income <= 0) return { reliable: false, reason: 'no-income' }
+  if (!earliestTransactionDate || daysBetween(earliestTransactionDate, today) < MIN_RELIABLE_HISTORY_DAYS) {
+    return { reliable: false, reason: 'insufficient-history' }
+  }
+  if (income < SAVINGS_RATE_INCOME_FLOOR) return { reliable: false, reason: 'low-income' }
+  return { reliable: true, reason: 'ok' }
 }
 
 /* ------------------------------------------------------------------ */

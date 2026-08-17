@@ -38,12 +38,16 @@ export function Badge({
   )
 }
 
-/** A small colour chip that always sits next to a text label, never alone. */
+/**
+ * A small colour chip that always sits next to a text label, never alone.
+ * 10px is the floor for two adjacent categories to stay distinguishable —
+ * below that, similar hues in the palette read as the same dot.
+ */
 export function CategoryDot({ color, className }: { color: string; className?: string }) {
   return (
     <span
       aria-hidden="true"
-      className={cn('inline-block h-2 w-2 shrink-0 rounded-[2px]', className)}
+      className={cn('inline-block h-2.5 w-2.5 shrink-0 rounded-[2px]', className)}
       style={{ backgroundColor: `var(--ink-${color})` }}
     />
   )

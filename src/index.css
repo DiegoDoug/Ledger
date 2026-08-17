@@ -47,6 +47,19 @@
   --ink-viz-11: #35607a;
   --ink-viz-neutral: #8c8983;
 
+  /*
+   * Semantic aliases used by sparse-data and dormant-item treatments. They
+   * point at existing values rather than introduce new hues, so a component
+   * can say "this is a confidence notice" or "this row is dormant" in code
+   * without reaching for a raw text/surface token and losing that intent.
+   */
+  --ink-dormant-text: var(--ink-text-subtle);
+  --ink-method-badge-bg: var(--ink-surface-muted);
+  --ink-method-badge-text: var(--ink-text-muted);
+  --ink-info: #2f6f9e;
+  --ink-info-soft: #eaf1f7;
+  --ink-info-text: #1f5a82;
+
   --ink-shadow-card: 0 1px 2px rgb(24 23 20 / 0.04), 0 1px 3px rgb(24 23 20 / 0.03);
   --ink-shadow-pop: 0 12px 32px -8px rgb(24 23 20 / 0.18), 0 2px 8px rgb(24 23 20 / 0.06);
 }
@@ -87,6 +100,13 @@
   --ink-viz-11: #6aa8c9;
   --ink-viz-neutral: #85858c;
 
+  --ink-dormant-text: var(--ink-text-subtle);
+  --ink-method-badge-bg: var(--ink-surface-muted);
+  --ink-method-badge-text: var(--ink-text-muted);
+  --ink-info: #5fa4de;
+  --ink-info-soft: #132330;
+  --ink-info-text: #8cc0ea;
+
   --ink-shadow-card: 0 1px 2px rgb(0 0 0 / 0.5);
   --ink-shadow-pop: 0 16px 40px -10px rgb(0 0 0 / 0.7), 0 2px 8px rgb(0 0 0 / 0.4);
 }
@@ -112,6 +132,13 @@
   --color-negative-soft: var(--ink-negative-soft);
   --color-warning: var(--ink-warning);
   --color-warning-soft: var(--ink-warning-soft);
+
+  --color-dormant-text: var(--ink-dormant-text);
+  --color-method-badge-bg: var(--ink-method-badge-bg);
+  --color-method-badge-text: var(--ink-method-badge-text);
+  --color-info: var(--ink-info);
+  --color-info-soft: var(--ink-info-soft);
+  --color-info-text: var(--ink-info-text);
 
   --color-viz-1: var(--ink-viz-1);
   --color-viz-2: var(--ink-viz-2);

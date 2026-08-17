@@ -4,18 +4,20 @@ import { PageHeader } from '../components/PageHeader'
 import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { StatCard } from '../components/StatCard'
 import { DeltaTag, EmptyState, ProgressBar } from '../components/ui/Primitives'
+import { SparseDataNotice } from '../components/ui/SparseDataNotice'
 import { CashFlowChart } from '../components/charts/CashFlowChart'
 import { NetFlowChart } from '../components/charts/NetFlowChart'
 import { TrendChart } from '../components/charts/TrendChart'
 import { Donut } from '../components/charts/Donut'
 import { Field, Input, Select } from '../components/ui/Field'
-import { Button } from '../components/ui/Button'
+import { BudgetStatusLine } from '../components/BudgetStatusLine'
 import { useLedger } from '../data/store'
 import { useFormat } from '../lib/format'
 import {
   PERIOD_OPTIONS,
   buildReport,
   categoryDeltas,
+  defaultPeriodId,
   earliestDate,
   previousPeriod,
   resolvePeriod,
@@ -28,6 +30,7 @@ import {
   budgetProgress,
   percentChange,
   savingsRate,
+  savingsRateConfidence,
   totals,
 } from '../domain/calculations'
 import { addMonthsToKey, formatMonthLabel, monthKey, todayIso } from '../domain/dates'
@@ -40,7 +43,9 @@ export function AnalyticsPage() {
   const navigate = useNavigate()
   const today = todayIso()
 
-  const [periodId, setPeriodId] = useState<PeriodId>('last-6-months')
+  const [periodId, setPeriodId] = useState<PeriodId>(() =>
+    defaultPeriodId(earliestDate(data.transactions), today),
+  )
   const [customFrom, setCustomFrom] = useState(() => addMonthsToKey(monthKey(today), -2) + '-01')
   const [customTo, setCustomTo] = useState(today)
 
@@ -64,6 +69,9 @@ export function AnalyticsPage() {
     () => categoryDeltas(report.transactions, previousTransactions, data.categories).slice(0, 6),
     [report.transactions, previousTransactions, data.categories],
   )
+  // Every row null means there is no prior period at all, not that each
+  // category individually lacks history — one explanation beats six repeats.
+  const noPriorPeriod = movement.length > 0 && movement.every((row) => row.percent === null)
 
   // Budget performance across the months in view, so the figure matches the period.
   const budgetRows = useMemo(
@@ -78,6 +86,11 @@ export function AnalyticsPage() {
 
   const trend = spendingTrend(report.monthly)
   const rate = savingsRate(report.income, report.expenses)
+  const rateConfidence = savingsRateConfidence(
+    report.income,
+    earliestDate(data.transactions),
+    today,
+  )
   const monthsWithActivity = report.monthly.filter((m) => m.count > 0).length
 
   if (data.transactions.length === 0) {
@@ -169,14 +182,18 @@ export function AnalyticsPage() {
         />
         <StatCard
           label="Savings rate"
-          value={report.income > 0 ? format.percent(rate) : '—'}
-          tone={rate < 0 ? 'negative' : rate >= 20 ? 'positive' : 'default'}
+          value={rateConfidence.reliable ? format.percent(rate) : '—'}
+          tone={rateConfidence.reliable ? (rate < 0 ? 'negative' : rate >= 20 ? 'positive' : 'default') : 'default'}
           meta={
-            <p className="text-xs text-muted">
-              {report.income > 0
-                ? `${format.money(report.net)} kept out of ${format.money(report.income)}`
-                : 'No income in this period'}
-            </p>
+            rateConfidence.reason === 'no-income' ? (
+              <p className="text-xs text-muted">No income in this period</p>
+            ) : !rateConfidence.reliable ? (
+              <SparseDataNotice message="Not enough history yet to be meaningful" />
+            ) : (
+              <p className="text-xs text-muted">
+                {format.money(report.net)} kept out of {format.money(report.income)}
+              </p>
+            )
           }
         />
       </section>
@@ -266,16 +283,9 @@ export function AnalyticsPage() {
             }
           />
           {budgetedMonths.length === 0 ? (
-            <EmptyState
-              compact
-              title="No budgets in this period"
-              description="Set monthly category budgets to track them here."
-              action={
-                <Button variant="secondary" size="sm" onClick={() => navigate('/budgets')}>
-                  Go to budgets
-                </Button>
-              }
-            />
+            <CardBody>
+              <BudgetStatusLine health={null} monthLabel={report.period.label} />
+            </CardBody>
           ) : (
             <CardBody className="space-y-2.5">
               {budgetedMonths.map(({ month, health }) => (
@@ -309,7 +319,7 @@ export function AnalyticsPage() {
                   <p className="mt-1 text-[11px] text-muted">
                     {BUDGET_STATUS_LABELS[health.status]}
                     {health.overCount > 0
-                      ? ` — ${plural(health.overCount, 'category')} over budget`
+                      ? ` — ${plural(health.overCount, 'category', 'categories')} over budget`
                       : ''}
                   </p>
                 </div>
@@ -325,6 +335,10 @@ export function AnalyticsPage() {
           />
           {movement.length === 0 ? (
             <EmptyState compact title="Nothing to compare yet" />
+          ) : noPriorPeriod ? (
+            <CardBody>
+              <SparseDataNotice message="Movement will appear once you have a second period to compare against." />
+            </CardBody>
           ) : (
             <CardBody>
               <ul className="divide-y divide-line">

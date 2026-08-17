@@ -6,31 +6,17 @@ import { Button } from '../components/ui/Button'
 import { Field, Input, SegmentedControl, Select } from '../components/ui/Field'
 import { Modal } from '../components/ui/Modal'
 import { Badge, CategoryDot, EmptyState, SectionTitle } from '../components/ui/Primitives'
+import { Disclosure } from '../components/ui/Disclosure'
 import { Menu } from '../components/ui/Menu'
 import { useLedger } from '../data/store'
 import { useToast } from '../components/ui/Toast'
 import { useFormat } from '../lib/format'
 import { categoryTotals, countByCategory, transactionsInMonth } from '../domain/calculations'
+import { PALETTE, pickDefaultColor } from '../domain/categoryColor'
 import { monthKey, todayIso } from '../domain/dates'
 import { IconPlus, IconTag } from '../components/icons'
 import { plural } from '../lib/plural'
 import type { Category, CategoryType } from '../domain/types'
-
-/** The chart palette. A category's colour is a label aid, never the only signal. */
-const PALETTE = [
-  'viz-1',
-  'viz-2',
-  'viz-3',
-  'viz-4',
-  'viz-5',
-  'viz-6',
-  'viz-7',
-  'viz-8',
-  'viz-9',
-  'viz-10',
-  'viz-11',
-  'viz-neutral',
-]
 
 export function CategoriesPage() {
   const { data, actions } = useLedger()
@@ -91,10 +77,55 @@ export function CategoriesPage() {
         <div className="space-y-5">
           {groups.map((group) => {
             const rows = data.categories.filter((c) => c.type === group.type)
+            const usedRows = rows.filter((c) => (usage.get(c.id) ?? 0) > 0)
+            const unusedRows = rows.filter((c) => (usage.get(c.id) ?? 0) === 0)
+
+            const renderRow = (category: Category) => {
+              const count = usage.get(category.id) ?? 0
+              const spent = monthTotals.get(category.id) ?? 0
+              const budgets = data.budgets.filter((b) => b.categoryId === category.id)
+              return (
+                <li
+                  key={category.id}
+                  className="flex items-center gap-3 border-b border-line px-3 py-2.5 last:border-b-0"
+                >
+                  <CategoryDot color={category.color} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[13px] font-medium text-ink">{category.name}</p>
+                    <p className="mt-0.5 text-[11px] text-muted">
+                      {count === 0 ? 'Not used yet' : plural(count, 'transaction')}
+                      {budgets.length > 0 ? ' · budgeted' : ''}
+                    </p>
+                  </div>
+                  <div className="shrink-0 text-right">
+                    <p className="tnum text-[13px] font-semibold text-ink">
+                      {format.money(spent)}
+                    </p>
+                    <p className="text-[11px] text-subtle">This month</p>
+                  </div>
+                  <Menu
+                    label={`Actions for ${category.name}`}
+                    items={[
+                      {
+                        label: 'View transactions',
+                        onSelect: () => navigate(`/transactions?category=${category.id}`),
+                      },
+                      { label: 'Rename or recolour', onSelect: () => setEditing(category) },
+                      {
+                        label: 'Delete',
+                        destructive: true,
+                        onSelect: () => setDeleting(category),
+                      },
+                    ]}
+                  />
+                </li>
+              )
+            }
+
             return (
               <section key={group.type}>
                 <SectionTitle className="mb-2">
-                  {group.title} · {plural(rows.length, 'category')}
+                  {group.title} · {plural(rows.length, 'category', 'categories')}
                 </SectionTitle>
                 <Card>
                   <CardHeader title={group.title} description={group.description} />
@@ -109,51 +140,17 @@ export function CategoriesPage() {
                       }
                     />
                   ) : (
-                    <ul>
-                      {rows.map((category) => {
-                        const count = usage.get(category.id) ?? 0
-                        const spent = monthTotals.get(category.id) ?? 0
-                        const budgets = data.budgets.filter((b) => b.categoryId === category.id)
-                        return (
-                          <li
-                            key={category.id}
-                            className="flex items-center gap-3 border-b border-line px-3 py-2.5 last:border-b-0"
-                          >
-                            <CategoryDot color={category.color} className="h-2.5 w-2.5" />
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-[13px] font-medium text-ink">
-                                {category.name}
-                              </p>
-                              <p className="mt-0.5 text-[11px] text-muted">
-                                {count === 0 ? 'Not used yet' : plural(count, 'transaction')}
-                                {budgets.length > 0 ? ' · budgeted' : ''}
-                              </p>
-                            </div>
-                            <div className="shrink-0 text-right">
-                              <p className="tnum text-[13px] font-semibold text-ink">
-                                {format.money(spent)}
-                              </p>
-                              <p className="text-[11px] text-subtle">This month</p>
-                            </div>
-                            <Menu
-                              label={`Actions for ${category.name}`}
-                              items={[
-                                {
-                                  label: 'View transactions',
-                                  onSelect: () => navigate(`/transactions?category=${category.id}`),
-                                },
-                                { label: 'Rename or recolour', onSelect: () => setEditing(category) },
-                                {
-                                  label: 'Delete',
-                                  destructive: true,
-                                  onSelect: () => setDeleting(category),
-                                },
-                              ]}
-                            />
-                          </li>
-                        )
-                      })}
-                    </ul>
+                    <>
+                      {usedRows.length > 0 ? <ul>{usedRows.map(renderRow)}</ul> : null}
+                      {unusedRows.length > 0 ? (
+                        <Disclosure
+                          label={`${plural(unusedRows.length, 'unused category', 'unused categories')}`}
+                          className="border-t border-line px-2"
+                        >
+                          <ul>{unusedRows.map(renderRow)}</ul>
+                        </Disclosure>
+                      ) : null}
+                    </>
                   )}
                 </Card>
               </section>
@@ -202,7 +199,7 @@ function CategoryDialog({
 
   const [name, setName] = useState(category?.name ?? '')
   const [type, setType] = useState<CategoryType>(category?.type ?? 'expense')
-  const [color, setColor] = useState(category?.color ?? PALETTE[0])
+  const [color, setColor] = useState(() => category?.color ?? pickDefaultColor(data.categories, type))
   const [error, setError] = useState<string | undefined>()
 
   function handleSubmit(event: React.FormEvent) {
@@ -273,7 +270,11 @@ function CategoryDialog({
             name="category-type"
             label="Direction"
             value={type}
-            onChange={setType}
+            onChange={(value) => {
+              setType(value)
+              // A fresh direction has its own set of colours already in use.
+              setColor(pickDefaultColor(data.categories, value))
+            }}
             options={[
               { value: 'expense', label: 'Spending' },
               { value: 'income', label: 'Income' },

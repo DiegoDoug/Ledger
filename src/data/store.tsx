@@ -207,14 +207,17 @@ const SAVE_DEBOUNCE_MS = 250
 export function LedgerProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(reducer, INITIAL)
   const repositoryRef = useRef<LedgerRepository | null>(null)
-  const startedRef = useRef(false)
 
   useEffect(() => {
-    // StrictMode mounts effects twice in development; opening the database and
-    // seeding must happen exactly once.
-    if (startedRef.current) return
-    startedRef.current = true
-
+    /*
+     * StrictMode mounts effects twice in development: mount, cleanup, mount
+     * again. `cancelled` alone is the correct guard for that — the first
+     * invocation's cleanup flips its own `cancelled` before its await
+     * resolves, so it bails out, and the second invocation runs to
+     * completion normally. A ref that skips the second invocation entirely
+     * is the wrong fix: it leaves nothing to ever finish, since the first
+     * invocation is the one guaranteed to be cancelled.
+     */
     let cancelled = false
 
     void (async () => {

@@ -3,9 +3,10 @@ import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { Card, CardBody } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
-import { Field, Input, Select } from '../components/ui/Field'
+import { Input, Select } from '../components/ui/Field'
 import { Badge, EmptyState, SectionTitle } from '../components/ui/Primitives'
 import { TransactionRow } from '../components/TransactionRow'
+import { FilterToggleButton, TransactionFilterFields } from '../components/TransactionFilterFields'
 import { useLedger } from '../data/store'
 import { useFormat } from '../lib/format'
 import { useUi } from '../App'
@@ -52,6 +53,7 @@ export function SearchPage() {
   const [maxAmount, setMaxAmount] = useState('')
   const [sort, setSort] = useState<(typeof SORT_OPTIONS)[number]['value']>('date:desc')
   const [limit, setLimit] = useState(PAGE_SIZE)
+  const [showFilters, setShowFilters] = useState(false)
 
   // Keep the query in the URL so a search is shareable and survives a reload.
   useEffect(() => {
@@ -85,7 +87,8 @@ export function SearchPage() {
     }
   }, [term, type, categoryId, accountId, from, to, minAmount, maxAmount, sort])
 
-  const hasQuery = term.trim().length > 0 || activeFilterCount(query) > 0
+  const filterCount = activeFilterCount(query)
+  const hasQuery = term.trim().length > 0 || filterCount > 0
 
   const results = useMemo(
     () => (hasQuery ? queryTransactions(data.transactions, query, context) : []),
@@ -104,8 +107,7 @@ export function SearchPage() {
     setLimit(PAGE_SIZE)
   }, [term, type, categoryId, accountId, from, to, minAmount, maxAmount, sort])
 
-  function reset() {
-    setTerm('')
+  function clearFilters() {
     setType('all')
     setCategoryId('')
     setAccountId('')
@@ -113,6 +115,11 @@ export function SearchPage() {
     setTo('')
     setMinAmount('')
     setMaxAmount('')
+  }
+
+  function reset() {
+    setTerm('')
+    clearFilters()
   }
 
   return (
@@ -157,121 +164,47 @@ export function SearchPage() {
                 ))}
               </Select>
             </div>
-          </div>
-
-          <div className="grid gap-3 rounded-lg border border-line bg-surface-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4">
-            <Field label="Type" htmlFor="search-type">
-              <Select
-                id="search-type"
-                value={type}
-                onChange={(e) => setType(e.target.value as TransactionType | 'all')}
-              >
-                <option value="all">All types</option>
-                <option value="expense">Expenses</option>
-                <option value="income">Income</option>
-                <option value="transfer">Transfers</option>
-              </Select>
-            </Field>
-
-            <Field
-              label="Category"
-              htmlFor="search-category"
-              hint={type === 'transfer' ? 'Transfers have no category.' : undefined}
-            >
-              <Select
-                id="search-category"
-                value={categoryId}
-                onChange={(e) => setCategoryId(e.target.value)}
-                disabled={type === 'transfer'}
-                aria-describedby={type === 'transfer' ? 'search-category-hint' : undefined}
-              >
-                <option value="">All categories</option>
-                <optgroup label="Spending">
-                  {data.categories
-                    .filter((c) => c.type === 'expense')
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </optgroup>
-                <optgroup label="Income">
-                  {data.categories
-                    .filter((c) => c.type === 'income')
-                    .map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
-                      </option>
-                    ))}
-                </optgroup>
-              </Select>
-            </Field>
-
-            <Field label="Account" htmlFor="search-account">
-              <Select
-                id="search-account"
-                value={accountId}
-                onChange={(e) => setAccountId(e.target.value)}
-              >
-                <option value="">All accounts</option>
-                {data.accounts.map((a) => (
-                  <option key={a.id} value={a.id}>
-                    {a.name}
-                  </option>
-                ))}
-              </Select>
-            </Field>
-
-            <Field label="Minimum amount" htmlFor="search-min">
-              <Input
-                id="search-min"
-                inputMode="decimal"
-                value={minAmount}
-                prefix={format.symbol}
-                placeholder="0.00"
-                onChange={(e) => setMinAmount(e.target.value)}
+            <div className="flex gap-2">
+              <FilterToggleButton
+                open={showFilters}
+                onToggle={() => setShowFilters((v) => !v)}
+                count={filterCount}
+                controls="search-filters"
               />
-            </Field>
-
-            <Field label="From" htmlFor="search-from">
-              <Input
-                id="search-from"
-                type="date"
-                value={from}
-                max={to || undefined}
-                onChange={(e) => setFrom(e.target.value)}
-              />
-            </Field>
-
-            <Field label="To" htmlFor="search-to">
-              <Input
-                id="search-to"
-                type="date"
-                value={to}
-                min={from || undefined}
-                onChange={(e) => setTo(e.target.value)}
-              />
-            </Field>
-
-            <Field label="Maximum amount" htmlFor="search-max">
-              <Input
-                id="search-max"
-                inputMode="decimal"
-                value={maxAmount}
-                prefix={format.symbol}
-                placeholder="No limit"
-                onChange={(e) => setMaxAmount(e.target.value)}
-              />
-            </Field>
-
-            <div className="flex items-end">
               {hasQuery ? (
                 <Button variant="ghost" size="sm" onClick={reset}>
-                  Clear search and filters
+                  Clear
                 </Button>
               ) : null}
             </div>
           </div>
+
+          {showFilters ? (
+            <div id="search-filters">
+              <TransactionFilterFields
+                idPrefix="search"
+                type={type}
+                onTypeChange={setType}
+                categoryId={categoryId}
+                onCategoryChange={setCategoryId}
+                accountId={accountId}
+                onAccountChange={setAccountId}
+                from={from}
+                onFromChange={setFrom}
+                to={to}
+                onToChange={setTo}
+                minAmount={minAmount}
+                onMinAmountChange={setMinAmount}
+                maxAmount={maxAmount}
+                onMaxAmountChange={setMaxAmount}
+                categories={data.categories}
+                accounts={data.accounts}
+                currencySymbol={format.symbol}
+                filterCount={filterCount}
+                onClear={clearFilters}
+              />
+            </div>
+          ) : null}
 
           {hasQuery ? (
             <div

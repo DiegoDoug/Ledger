@@ -181,6 +181,19 @@ export const IconTag = (p: IconProps) => (
   </Icon>
 )
 
+export const IconInfo = (p: IconProps) => (
+  <Icon {...p}>
+    <circle cx="8" cy="8" r="6" />
+    <path d="M8 7.25v4M8 5.25v.1" />
+  </Icon>
+)
+
+export const IconChevronDown = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M4 6.5 8 10.5l4-4" />
+  </Icon>
+)
+
 export const IconCheck = (p: IconProps) => (
   <Icon {...p}>
     <path d="M3 8.5 6.5 12 13 4.5" />

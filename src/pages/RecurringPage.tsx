@@ -47,6 +47,7 @@ export function RecurringPage() {
 
   const committedExpense = monthlyCommitment(data.recurring, 'expense')
   const committedIncome = monthlyCommitment(data.recurring, 'income')
+  const activeIncomeCount = data.recurring.filter((r) => r.active && r.type === 'income').length
 
   return (
     <>
@@ -76,9 +77,17 @@ export function RecurringPage() {
           value={format.money(committedIncome)}
           tone={committedIncome > 0 ? 'positive' : 'default'}
           meta={
-            <p className="text-xs text-muted">
-              {plural(data.recurring.filter((r) => r.active && r.type === 'income').length, 'active source')}
-            </p>
+            activeIncomeCount === 0 ? (
+              <button
+                type="button"
+                onClick={() => setEditing(null)}
+                className="rounded text-xs font-medium text-accent-text hover:underline"
+              >
+                + Add income
+              </button>
+            ) : (
+              <p className="text-xs text-muted">{plural(activeIncomeCount, 'active source')}</p>
+            )
           }
         />
         <StatCard
@@ -132,7 +141,7 @@ export function RecurringPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="truncate text-[13px] font-medium text-ink">{rule.name}</span>
                       <Badge tone="neutral">{FREQUENCY_LABELS[rule.frequency]}</Badge>
-                      {!rule.active ? <Badge tone="warning">Paused</Badge> : null}
+                      {!rule.active ? <Badge tone="neutral">Paused</Badge> : null}
                     </div>
                     <p className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-[11px] text-muted">
                       {isTransfer ? (

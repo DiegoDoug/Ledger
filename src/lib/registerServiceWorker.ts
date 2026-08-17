@@ -1,4 +1,5 @@
 import { APP_VERSION } from './version'
+import { isDesktop } from './desktop'
 
 /**
  * Register the service worker so Ledger opens offline.
@@ -9,9 +10,15 @@ import { APP_VERSION } from './version'
  *
  * Service workers require a secure context, so this quietly does nothing when
  * the app is served over plain HTTP from anything other than localhost.
+ *
+ * Inside the Tauri desktop shell there is no browser "install" affordance to
+ * earn and no network dependency to protect against — the window is already
+ * a native, fully offline app — so registration is skipped there entirely
+ * rather than adding a second cache layer with nothing to cache for.
  */
 export function registerServiceWorker(): void {
   if (!import.meta.env.PROD) return
+  if (isDesktop()) return
   if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return
   if (!window.isSecureContext) return
 

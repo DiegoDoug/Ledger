@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "Capabilities granted to Ledger's main window. Deliberately narrow: the core baseline plus only the two dialog operations the app actually uses (native open/save pickers). No filesystem, shell, or HTTP plugin permission is granted — file I/O goes through Ledger's own save_text_file/read_text_file commands, which only ever touch a path the user just chose in one of those dialogs.",
+  "windows": ["main"],
+  "permissions": ["core:default", "dialog:allow-open", "dialog:allow-save"]
+}

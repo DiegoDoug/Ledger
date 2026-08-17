@@ -1,0 +1,101 @@
+name: Desktop build
+
+# Builds native installers for Windows, macOS and Linux with Tauri. Runs on
+# native runners for each platform, since cross-compiling a WebView-backed
+# desktop app is not practical.
+#
+# Triggers:
+#   - `v*` tags: full release matrix, artifacts attached to the workflow run.
+#   - manual dispatch: same matrix, for testing the pipeline without cutting
+#     a release.
+#
+# This intentionally does NOT create or publish a GitHub Release, and does
+# NOT sign or notarize anything — see "Installer / distribution strategy" in
+# the README for what production signing requires and the secrets it needs
+# (WINDOWS_CERTIFICATE / WINDOWS_CERTIFICATE_PASSWORD for Authenticode,
+# APPLE_CERTIFICATE / APPLE_CERTIFICATE_PASSWORD / APPLE_SIGNING_IDENTITY /
+# APPLE_ID / APPLE_PASSWORD / APPLE_TEAM_ID for macOS notarization, and
+# TAURI_SIGNING_PRIVATE_KEY / TAURI_SIGNING_PRIVATE_KEY_PASSWORD for the
+# updater). Until those are configured, the artifacts produced here are
+# unsigned and are for local testing / sideloading only.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch: {}
+
+jobs:
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            artifact: windows
+          - platform: macos-latest
+            artifact: macos
+          - platform: ubuntu-22.04
+            artifact: linux
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux native dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            build-essential \
+            libssl-dev \
+            libgtk-3-dev
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Cargo/target
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      - name: Typecheck and unit test
+        run: |
+          npm run typecheck
+          npm run test
+
+      - name: Build desktop installers
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Uncomment once Windows/macOS signing secrets are configured:
+          # WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          # WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          # APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          # APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          # APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          # APPLE_ID: ${{ secrets.APPLE_ID }}
+          # APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          # APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+
+      - name: Upload installers
+        uses: actions/upload-artifact@v4
+        with:
+          name: ledger-${{ matrix.artifact }}
+          path: |
+            src-tauri/target/release/bundle/**/*.msi
+            src-tauri/target/release/bundle/**/*.exe
+            src-tauri/target/release/bundle/**/*.dmg
+            src-tauri/target/release/bundle/**/*.app
+            src-tauri/target/release/bundle/**/*.AppImage
+            src-tauri/target/release/bundle/**/*.deb
+          if-no-files-found: warn

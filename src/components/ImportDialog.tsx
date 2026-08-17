@@ -9,6 +9,7 @@ import { useFormat } from '../lib/format'
 import { analyseCsvImport, CSV_COLUMNS } from '../domain/portability'
 import type { ImportAnalysis, ImportOptions, ImportRow } from '../domain/portability'
 import { readFileAsText } from '../lib/download'
+import { importCsvFile, isDesktop } from '../lib/desktop'
 import { TRANSACTION_TYPE_LABELS } from '../domain/types'
 import { IconUpload } from './icons'
 import { cn } from '../lib/cn'
@@ -69,6 +70,20 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
       return
     }
     setFileName(file.name)
+    setText(result.text)
+    setStage('preview')
+  }
+
+  async function handleNativePick() {
+    setBusy(true)
+    setReadError(null)
+    const result = await importCsvFile()
+    setBusy(false)
+    if (!result.ok) {
+      if (!result.cancelled) setReadError(result.message)
+      return
+    }
+    setFileName(result.filename)
     setText(result.text)
     setStage('preview')
   }
@@ -162,6 +177,18 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
               onChange={(e) => void handleFile(e.target.files?.[0])}
             />
           </label>
+
+          {isDesktop() ? (
+            <Button
+              variant="secondary"
+              className="w-full"
+              onClick={() => void handleNativePick()}
+              disabled={busy}
+            >
+              <IconUpload className="h-3.5 w-3.5" />
+              Choose with the system file picker
+            </Button>
+          ) : null}
 
           {readError ? (
             <p role="alert" className="text-[13px] text-negative">

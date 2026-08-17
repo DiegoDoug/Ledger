@@ -1,0 +1,25 @@
+name: CI
+
+# Fast feedback on every push and PR: typecheck, unit tests, and the web
+# production build. This does not touch Rust or the desktop shell, so it
+# stays quick and runs on every change — see desktop.yml for the (much
+# heavier) native build matrix.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - run: npm ci
+      - run: npm run verify # typecheck -> test -> build

@@ -4,3 +4,7 @@ dist/
 .env
 .env.local
 .DS_Store
+
+# Tauri desktop build output (see src-tauri/.gitignore for the primary rules).
+src-tauri/target/
+src-tauri/gen/schemas/

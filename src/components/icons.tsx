@@ -200,6 +200,12 @@ export const IconCheck = (p: IconProps) => (
   </Icon>
 )
 
+export const IconFolder = (p: IconProps) => (
+  <Icon {...p}>
+    <path d="M2 4.5A1.5 1.5 0 0 1 3.5 3h2.6l1.3 1.5H12.5A1.5 1.5 0 0 1 14 6v5.5A1.5 1.5 0 0 1 12.5 13h-9A1.5 1.5 0 0 1 2 11.5Z" />
+  </Icon>
+)
+
 export const IconLogo = (p: IconProps) => (
   <svg viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false" {...p}>
     <rect width="24" height="24" rx="6" fill="var(--ink-accent)" />

@@ -22,6 +22,7 @@ docker compose up -d --build   # then open http://localhost:8080
 - [Scripts](#scripts)
 - [Testing](#testing)
 - [Docker](#docker)
+- [Desktop](#desktop)
 - [Self-hosting](#self-hosting)
 - [Where your data lives](#where-your-data-lives)
 - [Import and export](#import-and-export)
@@ -67,8 +68,9 @@ which makes double-counting structurally impossible.
 | Routing | React Router 7, hash-based |
 | Charts | Hand-drawn SVG — no charting dependency |
 | Storage | IndexedDB, with a localStorage fallback |
-| Tests | Vitest — 257 tests over the financial logic |
+| Tests | Vitest — 303 tests over the financial logic and platform helpers |
 | Runtime image | nginx on Alpine, non-root, read-only filesystem |
+| Desktop shell | Tauri 2 (Rust host + the OS's own WebView) — optional, same web build |
 
 Three runtime dependencies: `react`, `react-dom` and `react-router-dom`, plus a
 self-hosted variable font. No UI kit, no chart library, no date library, no state
@@ -205,10 +207,15 @@ every screen has something meaningful to show. Settings can restore or clear it.
 | `npm run docker:build` | Build the production image |
 | `npm run docker:up` | Build and start the container |
 | `npm run docker:down` | Stop and remove the container |
+| `npm run desktop:dev` | Launch the desktop shell against the Vite dev server |
+| `npm run desktop:build` | Debug desktop build — compiles without full optimisation |
+| `npm run desktop:package` | Release desktop build — produces the OS installers |
 
 ## Testing
 
-257 tests over the financial logic — deliberately no snapshot tests. They cover:
+303 tests — deliberately no snapshot tests. Almost all of them are over the
+financial logic, plus a handful for the desktop-detection helpers in
+`src/lib/desktop.ts`. They cover:
 
 - money parsing and formatting, including thousands separators and both decimal conventions
 - date-only arithmetic, month clamping, leap years and range aggregation
@@ -224,6 +231,7 @@ every screen has something meaningful to show. Settings can restore or clear it.
 - CSV parsing and writing, including quotes, embedded newlines, BOMs and semicolon delimiters
 - CSV import validation, duplicate detection, defaults and the export/import round trip
 - demo-data invariants — no negative cash, a bounded card balance, no dangling references
+- the desktop/browser detection guard, and path-to-filename parsing for the native save/restore dialogs
 
 ```bash
 npm run test
@@ -252,6 +260,110 @@ To change the port, copy `.env.example` to `.env` and edit `LEDGER_PORT`.
 The container runs as the unprivileged `nginx` user on a read-only filesystem
 with all capabilities dropped, and exposes `/healthz` for the healthcheck and any
 load balancer in front of it.
+
+## Desktop
+
+Ledger also ships as a native desktop app — a real installer, a native window
+and icon, no browser tab — built with [Tauri 2](https://tauri.app). It is the
+same React/Vite application, unmodified: the desktop shell adds a Rust host
+process around the existing web build rather than forking the frontend. See
+[`docs/adr/0001-desktop-delivery-architecture.md`](docs/adr/0001-desktop-delivery-architecture.md)
+for the full reasoning, including why it's Tauri rather than Electron and why
+storage stays on IndexedDB rather than moving to SQLite.
+
+**Requirements**, beyond what the web app needs:
+
+- A Rust toolchain ([rustup.rs](https://rustup.rs)) — stable channel.
+- Windows: the [WebView2](https://developer.microsoft.com/microsoft-edge/webview2/)
+  runtime (preinstalled on Windows 11 and current Windows 10) and the MSVC
+  Build Tools.
+- macOS: Xcode Command Line Tools (`xcode-select --install`).
+- Linux: `libwebkit2gtk-4.1-dev`, `libappindicator3-dev`, `librsvg2-dev`,
+  `patchelf`, `build-essential`, `libssl-dev`, `libgtk-3-dev` (Debian/Ubuntu
+  package names; see `.github/workflows/desktop.yml` for the exact install
+  step).
+
+```bash
+npm run desktop:dev       # native window + Vite dev server, with hot reload
+npm run desktop:build     # debug build — compiles, skips full optimisation
+npm run desktop:package   # release build — produces the installers below
+```
+
+`desktop:package` writes installers to `src-tauri/target/release/bundle/`:
+
+| Platform | Artifacts |
+| --- | --- |
+| Windows | `msi/*.msi`, `nsis/*-setup.exe` |
+| macOS | `macos/*.app`, `dmg/*.dmg` |
+| Linux | `appimage/*.AppImage`, `deb/*.deb` |
+
+### What changes on desktop, and what doesn't
+
+- **Storage is unchanged.** WebView2, WKWebView and WebKitGTK all implement
+  IndexedDB, so `LedgerRepository` and its IndexedDB/localStorage/memory
+  implementations run exactly as they do in a browser — nothing in
+  `src/data/` is desktop-aware. The ledger document itself never touches
+  Rust.
+- **Backup, restore and CSV export/import use native dialogs** instead of a
+  browser download/file input, via a narrow bridge in
+  [`src/lib/desktop.ts`](src/lib/desktop.ts). Every other page is identical
+  to the web build.
+- **The service worker does not register** inside the desktop shell — there
+  is no browser "install" affordance to earn and no network dependency to
+  protect against, since the window is already a native, fully offline app.
+- **Settings gains a "Data directory" control** pointing at the app's own
+  data folder (the OS's per-app application-data directory), so the app has
+  an honest answer to "where does this live" beyond "inside the WebView,"
+  even though the ledger document itself is still stored by the WebView, not
+  as a file in that directory.
+
+### Security model
+
+Ledger handles financial data, so the desktop shell is deliberately
+narrow — see `src-tauri/capabilities/default.json` and `src-tauri/src/lib.rs`:
+
+- **No Node.js in the renderer.** Unlike Electron, there is no Node runtime
+  in the frontend to sandbox in the first place — `contextIsolation` /
+  `nodeIntegration` don't apply because the class of risk they exist to
+  contain isn't present.
+- **Capability-gated IPC.** The main window's capability file grants only
+  `core:default` plus the two dialog operations the app actually uses
+  (`dialog:allow-open`, `dialog:allow-save`). No filesystem, shell, or HTTP
+  plugin permission is granted to the frontend at all.
+- **No generic file access.** The app defines exactly two file commands,
+  `save_text_file` and `read_text_file`, and both only ever act on a path
+  the user just chose through a native OS dialog — there is no
+  `readArbitraryFile`/`writeArbitraryFile`-shaped command, and the frontend
+  cannot list, walk or glob the filesystem.
+- **A strict CSP** (`src-tauri/tauri.conf.json`) blocks every remote origin,
+  mirroring the CSP the Docker image already serves.
+- **No remote content.** The window only ever loads the app's own built
+  assets; there are no external links in the app to restrict navigation for.
+- **Import validation is unchanged.** JSON backups and CSV files are parsed
+  and validated by the same `parseBackup`/`analyseCsvImport` code paths as
+  the web build — the desktop shell only ferries bytes from disk to the
+  frontend, it does not parse or trust them itself.
+
+### Signing, notarization and auto-update
+
+Not configured in this repository — that requires credentials only the
+maintainer holds. `.github/workflows/desktop.yml` documents exactly which
+secrets to add and where they plug in:
+
+- **Windows**: an Authenticode certificate (`WINDOWS_CERTIFICATE` +
+  `WINDOWS_CERTIFICATE_PASSWORD`), or installers will show an "unknown
+  publisher" warning.
+- **macOS**: a Developer ID certificate and notarization credentials
+  (`APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
+  `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID`), or macOS Gatekeeper will
+  block the unsigned `.app`/`.dmg`.
+- **Auto-update**: `tauri-plugin-updater` plus a signing keypair
+  (`TAURI_SIGNING_PRIVATE_KEY` / `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`). Not
+  wired up yet — see the ADR's "Remaining work" for what that involves.
+
+Until those are added, `desktop:package` still produces working, installable
+binaries — they're just unsigned, which is fine for local use or manual
+distribution and expected to trigger an OS warning on first run.
 
 ## Self-hosting
 
@@ -312,11 +424,14 @@ and installing it as an app require HTTPS (or `localhost`).
 
 ## Where your data lives
 
-**In your browser, on your device. Nowhere else.**
+**On your device. Nowhere else.**
 
 - Your ledger is a single JSON document in **IndexedDB** under the database
-  `ledger`, in the browser profile you are using. The theme preference is kept in
-  `localStorage` so it can be applied before the first paint.
+  `ledger` — in the browser profile you are using for the web build, or in the
+  desktop app's own WebView storage for the Tauri build. Either way it is the
+  same storage engine and the same `LedgerRepository` code. The theme
+  preference is kept in `localStorage` so it can be applied before the first
+  paint.
 - The Docker container serves static files and **stores nothing**. Deleting and
   recreating it does not touch your data. There is no volume to back up, because
   there is no server-side state.

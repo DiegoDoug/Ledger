@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PageHeader } from '../components/PageHeader'
 import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
@@ -19,8 +19,17 @@ import {
   parseBackup,
   transactionsToCsv,
 } from '../domain/portability'
+import type { BackupParseResult } from '../domain/portability'
 import { downloadText, readFileAsText } from '../lib/download'
-import { IconDownload, IconUpload } from '../components/icons'
+import {
+  getAppDataDirectory,
+  isDesktop,
+  openDataDirectory,
+  restoreJsonBackup,
+  saveCsvExport,
+  saveJsonBackup,
+} from '../lib/desktop'
+import { IconDownload, IconFolder, IconUpload } from '../components/icons'
 import { cn } from '../lib/cn'
 import { plural } from '../lib/plural'
 import { APP_VERSION } from '../lib/version'
@@ -50,6 +59,7 @@ export function SettingsPage() {
     data: LedgerData
     exportedAt?: string
   } | null>(null)
+  const [dataDir, setDataDir] = useState<string | null>(null)
 
   const sample = formatMoney(123456, {
     currency: data.settings.currency,
@@ -57,22 +67,60 @@ export function SettingsPage() {
   })
 
   const today = todayIso()
+  const desktop = isDesktop()
 
-  function handleExportCsv() {
-    downloadText(
-      exportFilename('transactions', today),
-      transactionsToCsv(data.transactions, data.accounts, data.categories),
-      'text/csv',
-    )
+  useEffect(() => {
+    if (!desktop) return
+    let cancelled = false
+    void getAppDataDirectory().then((dir) => {
+      if (!cancelled) setDataDir(dir)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [desktop])
+
+  async function handleExportCsv() {
+    const filename = exportFilename('transactions', today)
+    const csv = transactionsToCsv(data.transactions, data.accounts, data.categories)
+
+    if (desktop) {
+      const result = await saveCsvExport(csv, filename)
+      if (!result.ok) {
+        if (!result.cancelled) toast({ message: result.message, tone: 'error' })
+        return
+      }
+    } else {
+      downloadText(filename, csv, 'text/csv')
+    }
     toast({
       message: `Exported ${plural(data.transactions.length, 'transaction')} as CSV.`,
       tone: 'success',
     })
   }
 
-  function handleExportJson() {
-    downloadText(exportFilename('backup', today), buildBackup(data), 'application/json')
+  async function handleExportJson() {
+    const filename = exportFilename('backup', today)
+    const backup = buildBackup(data)
+
+    if (desktop) {
+      const result = await saveJsonBackup(backup, filename)
+      if (!result.ok) {
+        if (!result.cancelled) toast({ message: result.message, tone: 'error' })
+        return
+      }
+    } else {
+      downloadText(filename, backup, 'application/json')
+    }
     toast({ message: 'Exported a full backup.', tone: 'success' })
+  }
+
+  function applyParsedBackup(parsed: BackupParseResult) {
+    if (!parsed.ok) {
+      setRestoreError(parsed.error)
+      return
+    }
+    setPendingRestore({ data: parsed.data, ...(parsed.exportedAt ? { exportedAt: parsed.exportedAt } : {}) })
   }
 
   async function handleRestoreFile(file: File | undefined, input: HTMLInputElement) {
@@ -86,12 +134,28 @@ export function SettingsPage() {
       setRestoreError(read.error)
       return
     }
-    const parsed = parseBackup(read.text)
-    if (!parsed.ok) {
-      setRestoreError(parsed.error)
+    applyParsedBackup(parseBackup(read.text))
+  }
+
+  async function handleRestoreNative() {
+    setRestoreError(null)
+    const read = await restoreJsonBackup()
+    if (!read.ok) {
+      if (!read.cancelled) setRestoreError(read.message)
       return
     }
-    setPendingRestore({ data: parsed.data, ...(parsed.exportedAt ? { exportedAt: parsed.exportedAt } : {}) })
+    applyParsedBackup(parseBackup(read.text))
+  }
+
+  async function handleOpenDataDirectory() {
+    try {
+      await openDataDirectory()
+    } catch (error) {
+      toast({
+        message: error instanceof Error ? error.message : 'Could not open the data directory.',
+        tone: 'error',
+      })
+    }
   }
 
   function setTheme(theme: Settings['theme']) {
@@ -204,6 +268,22 @@ export function SettingsPage() {
               <span>Store</span>
               <span className="text-ink">{REPOSITORY_LABELS[storage]}</span>
             </div>
+            {desktop ? (
+              <div className="flex items-center justify-between gap-3">
+                <span className="min-w-0 flex-1 truncate" title={dataDir ?? undefined}>
+                  Data directory{dataDir ? `: ${dataDir}` : ''}
+                </span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => void handleOpenDataDirectory()}
+                >
+                  <IconFolder className="h-3.5 w-3.5" />
+                  Open
+                </Button>
+              </div>
+            ) : null}
             <dl className="grid grid-cols-2 gap-3 border-t border-line pt-3">
               <Stat label="Transactions" value={String(data.transactions.length)} />
               <Stat label="Accounts" value={String(data.accounts.length)} />
@@ -213,10 +293,12 @@ export function SettingsPage() {
               <Stat label="Saving" value={saving ? 'In progress' : 'Up to date'} />
             </dl>
             <p className="border-t border-line pt-3 text-xs">
-              Ledger stores everything in this browser on this device. Nothing is uploaded and there
-              is no account. The data is <strong className="font-medium text-ink">not encrypted</strong>{' '}
-              — anyone who can use this browser profile can read it — and clearing your browser data
-              deletes it. Export a backup to keep a copy.
+              Ledger stores everything {desktop ? "in this app's own data directory" : 'in this browser'}{' '}
+              on this device. Nothing is uploaded and there is no account. The data is{' '}
+              <strong className="font-medium text-ink">not encrypted</strong> — anyone who can use this{' '}
+              {desktop ? 'device' : 'browser profile'} can read it
+              {desktop ? '' : ', and clearing your browser data deletes it'}. Export a backup to keep a
+              copy.
             </p>
           </CardBody>
         </Card>
@@ -285,23 +367,30 @@ export function SettingsPage() {
               <IconUpload className="h-3.5 w-3.5" />
               Import transactions (CSV)
             </Button>
-            <label className="inline-flex">
-              <span
-                className={cn(
-                  'inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-line-strong',
-                  'bg-surface px-3 text-[13px] font-medium text-ink transition-colors hover:bg-surface-muted',
-                )}
-              >
+            {desktop ? (
+              <Button variant="secondary" onClick={() => void handleRestoreNative()}>
                 <IconUpload className="h-3.5 w-3.5" />
                 Restore backup (JSON)
-                <input
-                  type="file"
-                  accept=".json,application/json"
-                  className="sr-only"
-                  onChange={(e) => void handleRestoreFile(e.target.files?.[0], e.target)}
-                />
-              </span>
-            </label>
+              </Button>
+            ) : (
+              <label className="inline-flex">
+                <span
+                  className={cn(
+                    'inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-md border border-line-strong',
+                    'bg-surface px-3 text-[13px] font-medium text-ink transition-colors hover:bg-surface-muted',
+                  )}
+                >
+                  <IconUpload className="h-3.5 w-3.5" />
+                  Restore backup (JSON)
+                  <input
+                    type="file"
+                    accept=".json,application/json"
+                    className="sr-only"
+                    onChange={(e) => void handleRestoreFile(e.target.files?.[0], e.target)}
+                  />
+                </span>
+              </label>
+            )}
           </div>
           <p className="text-xs leading-relaxed text-muted">
             A CSV import shows you a preview first and reports every invalid or duplicate row before

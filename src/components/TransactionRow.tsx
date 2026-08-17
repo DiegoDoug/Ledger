@@ -3,9 +3,12 @@ import { useFormat } from '../lib/format'
 import { useUi } from '../App'
 import { cn } from '../lib/cn'
 import { Badge, CategoryDot } from './ui/Primitives'
+import { PaymentMethodBadge } from './ui/PaymentMethodBadge'
 import { Menu } from './ui/Menu'
 import { IconRepeat, IconTransfer } from './icons'
 import { TRANSACTION_TYPE_LABELS } from '../domain/types'
+import { todayIso } from '../domain/dates'
+import { detectPaymentMethod } from '../lib/paymentMethod'
 import type { Transaction } from '../domain/types'
 
 /**
@@ -36,6 +39,8 @@ export function TransactionRow({
 
   const isIncome = transaction.type === 'income'
   const isTransfer = transaction.type === 'transfer'
+  const isUpcoming = transaction.date > todayIso()
+  const paymentMethod = isTransfer ? null : detectPaymentMethod(transaction.description)
 
   return (
     <div
@@ -62,6 +67,11 @@ export function TransactionRow({
           {transaction.recurringId ? (
             <IconRepeat className="h-3 w-3 shrink-0 text-subtle" aria-label="Recurring" />
           ) : null}
+          {isUpcoming ? (
+            <Badge tone="neutral" className="shrink-0">
+              Upcoming
+            </Badge>
+          ) : null}
         </span>
         <span className="mt-0.5 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-[11px] text-muted">
           {isTransfer ? (
@@ -86,6 +96,7 @@ export function TransactionRow({
                 ·
               </span>
               <span className="truncate">{account?.name ?? 'Unknown account'}</span>
+              {paymentMethod ? <PaymentMethodBadge method={paymentMethod} /> : null}
             </>
           )}
           {showDate ? (

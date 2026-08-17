@@ -15,7 +15,9 @@ import {
   netWorth,
   percentChange,
   savingsRate,
+  savingsRateConfidence,
   savingsRateFor,
+  SAVINGS_RATE_INCOME_FLOOR,
   totalBalance,
   totals,
   transactionsInMonth,
@@ -96,6 +98,19 @@ describe('transfers', () => {
   it('does not change net cash flow', () => {
     const withoutTransfer = [tx({ amount: 1_000_00, type: 'income' })]
     expect(netCashFlow([...withoutTransfer, move])).toBe(netCashFlow(withoutTransfer))
+  })
+
+  it('leaves income and expenses at zero for a ledger made entirely of transfers', () => {
+    const onlyTransfers = [
+      move,
+      transfer({ amount: 200_00, accountId: 'a2', toAccountId: 'a1' }),
+    ]
+    const result = totals(onlyTransfers)
+    expect(result.income).toBe(0)
+    expect(result.expenses).toBe(0)
+    expect(result.net).toBe(0)
+    expect(result.transfers).toBe(700_00)
+    expect(savingsRate(result.income, result.expenses)).toBe(0)
   })
 
   it('does not distort the savings rate', () => {
@@ -272,6 +287,64 @@ describe('savings rate', () => {
 
   it('ignores negative income defensively', () => {
     expect(savingsRate(-100, 50)).toBe(0)
+  })
+})
+
+describe('savings rate confidence', () => {
+  it('is unreliable with no income, and says so', () => {
+    expect(savingsRateConfidence(0, '2026-01-01', '2026-06-01')).toEqual({
+      reliable: false,
+      reason: 'no-income',
+    })
+  })
+
+  it('is unreliable with less than 30 days of history, regardless of income', () => {
+    // Mirrors the exact bug this guards against: real income, but only a few
+    // days old, still swings a percentage wildly.
+    expect(
+      savingsRateConfidence(7_000_00, '2026-08-12', '2026-08-16').reliable,
+    ).toBe(false)
+    expect(savingsRateConfidence(7_000_00, '2026-08-12', '2026-08-16').reason).toBe(
+      'insufficient-history',
+    )
+  })
+
+  it('is unreliable with a full history but income below the floor', () => {
+    const result = savingsRateConfidence(1_000, '2026-01-01', '2026-06-01')
+    expect(result).toEqual({ reliable: false, reason: 'low-income' })
+  })
+
+  it('is reliable with real history and real income', () => {
+    const result = savingsRateConfidence(500_000, '2026-01-01', '2026-06-01')
+    expect(result).toEqual({ reliable: true, reason: 'ok' })
+  })
+
+  it('is unreliable when there is no transaction history at all', () => {
+    expect(savingsRateConfidence(500_000, undefined, '2026-06-01').reliable).toBe(false)
+  })
+
+  it('treats exactly 30 days of history as sufficient, 29 as not', () => {
+    // today - earliest = 29 days
+    expect(savingsRateConfidence(500_000, '2026-01-01', '2026-01-30')).toEqual({
+      reliable: false,
+      reason: 'insufficient-history',
+    })
+    // today - earliest = 30 days, income comfortably above the floor
+    expect(savingsRateConfidence(500_000, '2026-01-01', '2026-01-31')).toEqual({
+      reliable: true,
+      reason: 'ok',
+    })
+  })
+
+  it('treats income exactly at the floor as reliable, one cent under as not', () => {
+    expect(savingsRateConfidence(SAVINGS_RATE_INCOME_FLOOR - 1, '2026-01-01', '2026-06-01')).toEqual({
+      reliable: false,
+      reason: 'low-income',
+    })
+    expect(savingsRateConfidence(SAVINGS_RATE_INCOME_FLOOR, '2026-01-01', '2026-06-01')).toEqual({
+      reliable: true,
+      reason: 'ok',
+    })
   })
 })
 

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   buildReport,
   categoryDeltas,
+  defaultPeriodId,
   earliestDate,
   monthlySummaries,
   previousPeriod,
@@ -29,6 +30,34 @@ function tx(date: string, amount: number, type: Transaction['type'] = 'expense')
     updatedAt: `${date}T00:00:00.000Z`,
   }
 }
+
+describe('defaultPeriodId', () => {
+  it('defaults to this month when there is no history', () => {
+    expect(defaultPeriodId(undefined, '2026-06-15')).toBe('this-month')
+  })
+
+  it('defaults to this month for a ledger under 30 days old', () => {
+    expect(defaultPeriodId('2026-06-01', '2026-06-15')).toBe('this-month')
+  })
+
+  it('defaults to three months for a ledger with a couple months of history', () => {
+    expect(defaultPeriodId('2026-04-01', '2026-06-15')).toBe('last-3-months')
+  })
+
+  it('defaults to six months once there is enough history to make that useful', () => {
+    expect(defaultPeriodId('2025-10-01', '2026-06-15')).toBe('last-6-months')
+  })
+
+  it('flips from this-month to last-3-months exactly at 30 days', () => {
+    expect(defaultPeriodId('2026-01-01', '2026-01-30')).toBe('this-month') // 29 days
+    expect(defaultPeriodId('2026-01-01', '2026-01-31')).toBe('last-3-months') // 30 days
+  })
+
+  it('flips from last-3-months to last-6-months exactly at 90 days', () => {
+    expect(defaultPeriodId('2026-01-01', '2026-03-31')).toBe('last-3-months') // 89 days
+    expect(defaultPeriodId('2026-01-01', '2026-04-01')).toBe('last-6-months') // 90 days
+  })
+})
 
 describe('monthlySummaries', () => {
   const transactions = [

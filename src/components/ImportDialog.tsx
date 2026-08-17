@@ -80,7 +80,7 @@ export function ImportDialog({ onClose }: { onClose: () => void }) {
     const parts = [`Imported ${plural(result.imported, 'transaction')}`]
     if (result.createdAccounts > 0) parts.push(`created ${plural(result.createdAccounts, 'account')}`)
     if (result.createdCategories > 0) {
-      parts.push(`created ${plural(result.createdCategories, 'category')}`)
+      parts.push(`created ${plural(result.createdCategories, 'category', 'categories')}`)
     }
     if (result.skippedDuplicates > 0) parts.push(`skipped ${result.skippedDuplicates} duplicate`)
     if (result.skippedInvalid > 0) parts.push(`skipped ${result.skippedInvalid} invalid`)

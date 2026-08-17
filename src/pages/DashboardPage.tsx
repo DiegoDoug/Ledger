@@ -5,22 +5,24 @@ import { StatCard } from '../components/StatCard'
 import { Card, CardBody, CardHeader } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
 import { Select } from '../components/ui/Field'
-import { Badge, DeltaTag, EmptyState, ProgressBar, SectionTitle } from '../components/ui/Primitives'
+import { DeltaTag, EmptyState, SectionTitle } from '../components/ui/Primitives'
+import { SparseDataNotice } from '../components/ui/SparseDataNotice'
 import { CashFlowChart } from '../components/charts/CashFlowChart'
 import { Donut } from '../components/charts/Donut'
 import { TransactionRow } from '../components/TransactionRow'
+import { BudgetStatusLine } from '../components/BudgetStatusLine'
 import { useLedger } from '../data/store'
 import { useFormat } from '../lib/format'
 import { useUi } from '../App'
 import {
-  BUDGET_STATUS_LABELS,
   budgetHealth,
   budgetProgress,
   netWorth,
   percentChange,
   savingsRate,
+  savingsRateConfidence,
 } from '../domain/calculations'
-import { buildReport, earliestDate, previousPeriod, resolvePeriod } from '../domain/analytics'
+import { buildReport, defaultPeriodId, earliestDate, previousPeriod, resolvePeriod } from '../domain/analytics'
 import type { PeriodId } from '../domain/analytics'
 import { totals } from '../domain/calculations'
 import { formatMonthLabel, monthKey, relativeDayLabel, todayIso } from '../domain/dates'
@@ -60,6 +62,12 @@ export function DashboardPage() {
     const budgetMonth = period.months[period.months.length - 1] ?? currentMonth
     const budgets = budgetProgress(data.budgets, data.transactions, data.categories, budgetMonth)
 
+    const earliest = earliestDate(data.transactions)
+    // The chart window scales with actual history instead of a fixed six
+    // months, so three days of data doesn't render as a mostly-empty chart.
+    const chartPeriodId = defaultPeriodId(earliest, today)
+    const chartPeriod = resolvePeriod(chartPeriodId, today)
+
     return {
       period,
       report,
@@ -67,13 +75,9 @@ export function DashboardPage() {
       position: netWorth(data.accounts, data.transactions),
       savings: savingsRate(report.income, report.expenses),
       previousSavings: savingsRate(previous.income, previous.expenses),
-      // The chart always shows six months so the trend stays readable, whatever
-      // period is selected for the figures above it.
-      chart: buildReport(
-        data.transactions,
-        data.categories,
-        resolvePeriod('last-6-months', today),
-      ).monthly,
+      savingsConfidence: savingsRateConfidence(report.income, earliest, today),
+      chartPeriod,
+      chart: buildReport(data.transactions, data.categories, chartPeriod).monthly,
       recent: [...data.transactions]
         .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt.localeCompare(a.createdAt))
         .slice(0, 7),
@@ -176,7 +180,7 @@ export function DashboardPage() {
       <section aria-label={`Cash flow for ${periodLabel}`} className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard
           label="Income"
-          value={format.money(view.report.income)}
+          value={hasHistory ? format.money(view.report.income) : '—'}
           meta={
             <DeltaTag
               percent={percentChange(view.report.income, view.previous.income)}
@@ -186,7 +190,7 @@ export function DashboardPage() {
         />
         <StatCard
           label="Expenses"
-          value={format.money(view.report.expenses)}
+          value={hasHistory ? format.money(view.report.expenses) : '—'}
           meta={
             <DeltaTag
               percent={percentChange(view.report.expenses, view.previous.expenses)}
@@ -197,7 +201,7 @@ export function DashboardPage() {
         />
         <StatCard
           label="Net cash flow"
-          value={format.money(view.report.net)}
+          value={hasHistory ? format.money(view.report.net) : '—'}
           tone={view.report.net < 0 ? 'negative' : view.report.net > 0 ? 'positive' : 'default'}
           meta={
             <p className="text-xs text-muted">
@@ -207,17 +211,27 @@ export function DashboardPage() {
         />
         <StatCard
           label="Savings rate"
-          value={view.report.income > 0 ? format.percent(view.savings) : '—'}
-          tone={view.savings < 0 ? 'negative' : view.savings >= 20 ? 'positive' : 'default'}
+          value={hasHistory && view.savingsConfidence.reliable ? format.percent(view.savings) : '—'}
+          tone={
+            view.savingsConfidence.reliable
+              ? view.savings < 0
+                ? 'negative'
+                : view.savings >= 20
+                  ? 'positive'
+                  : 'default'
+              : 'default'
+          }
           meta={
-            view.report.income > 0 ? (
+            view.savingsConfidence.reason === 'no-income' ? (
+              <p className="text-xs text-muted">No income in this period</p>
+            ) : !view.savingsConfidence.reliable ? (
+              <SparseDataNotice message="Not enough history yet to be meaningful" />
+            ) : (
               <DeltaTag
                 percent={view.previous.income > 0 ? view.savings - view.previousSavings : null}
                 unit="pts"
                 suffix="vs prior period"
               />
-            ) : (
-              <p className="text-xs text-muted">No income in this period</p>
             )
           }
         />
@@ -234,7 +248,11 @@ export function DashboardPage() {
         <Card className="xl:col-span-2">
           <CardHeader
             title="Monthly cash flow"
-            description="Income against expenses over the last six months."
+            description={
+              view.chart.length > 1
+                ? `${view.chart.filter((m) => m.count > 0).length} of ${view.chart.length} months have activity.`
+                : `Income against expenses for ${periodLabel.toLowerCase()}.`
+            }
             actions={
               <Link
                 to="/analytics"
@@ -383,90 +401,12 @@ export function DashboardPage() {
                 })}
               </ul>
             )}
-          </Card>
-
-          <Card>
-            <CardHeader
-              title="Budget health"
-              description={formatMonthLabel(view.budgetMonth)}
-              actions={
-                <Link
-                  to="/budgets"
-                  className="rounded px-1.5 py-1 text-xs font-medium text-accent-text hover:bg-accent-soft"
-                >
-                  Budgets →
-                </Link>
-              }
-            />
-            {view.budgets.length === 0 ? (
-              <EmptyState
-                compact
-                title="No budgets yet"
-                description="Set a monthly cap to track spending against a target."
-                action={
-                  <Link to="/budgets">
-                    <Button variant="secondary" size="sm">
-                      Create a budget
-                    </Button>
-                  </Link>
-                }
+            <div className="border-t border-line px-4 py-3">
+              <BudgetStatusLine
+                health={view.budgets.length > 0 ? view.health : null}
+                monthLabel={formatMonthLabel(view.budgetMonth)}
               />
-            ) : (
-              <CardBody className="space-y-3">
-                <div className="flex flex-wrap items-baseline justify-between gap-2 border-b border-line pb-3">
-                  <Badge
-                    tone={
-                      view.health.status === 'over'
-                        ? 'negative'
-                        : view.health.status === 'warning'
-                          ? 'warning'
-                          : 'positive'
-                    }
-                  >
-                    {BUDGET_STATUS_LABELS[view.health.status]}
-                  </Badge>
-                  <span className="tnum text-[11px] text-muted">
-                    {format.money(view.health.spent)}
-                    <span aria-hidden="true"> / </span>
-                    <span className="sr-only"> of </span>
-                    {format.money(view.health.limit)}
-                    {view.health.overCount > 0
-                      ? ` · ${plural(view.health.overCount, 'category')} over`
-                      : ''}
-                  </span>
-                </div>
-                {view.budgets.slice(0, 4).map((progress) => (
-                  <div key={progress.budget.id}>
-                    <div className="mb-1.5 flex items-baseline justify-between gap-2">
-                      <span className="truncate text-[13px] text-ink">{progress.name}</span>
-                      <span className="tnum shrink-0 text-[11px] text-muted">
-                        {format.money(progress.spent, { compact: true })}
-                        <span aria-hidden="true"> / </span>
-                        <span className="sr-only"> of </span>
-                        {format.money(progress.limit, { compact: true })}
-                      </span>
-                    </div>
-                    <ProgressBar
-                      size="sm"
-                      value={progress.utilization}
-                      label={`${progress.name}: ${Math.round(progress.utilization)} percent of budget used, ${BUDGET_STATUS_LABELS[progress.status]}`}
-                      tone={
-                        progress.status === 'over'
-                          ? 'negative'
-                          : progress.status === 'warning'
-                            ? 'warning'
-                            : 'accent'
-                      }
-                    />
-                  </div>
-                ))}
-                {view.budgets.length > 4 ? (
-                  <p className="text-[11px] text-subtle">
-                    {view.budgets.length - 4} more on the budgets page.
-                  </p>
-                ) : null}
-              </CardBody>
-            )}
+            </div>
           </Card>
         </div>
       </div>

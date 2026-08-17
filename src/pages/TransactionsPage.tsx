@@ -3,9 +3,10 @@ import { useSearchParams } from 'react-router-dom'
 import { PageHeader } from '../components/PageHeader'
 import { Card, CardBody } from '../components/ui/Card'
 import { Button } from '../components/ui/Button'
-import { Field, Input, Select } from '../components/ui/Field'
-import { Badge, EmptyState } from '../components/ui/Primitives'
+import { Input, Select } from '../components/ui/Field'
+import { EmptyState } from '../components/ui/Primitives'
 import { TransactionRow } from '../components/TransactionRow'
+import { FilterToggleButton, TransactionFilterFields } from '../components/TransactionFilterFields'
 import { useLedger } from '../data/store'
 import { useFormat } from '../lib/format'
 import { useUi } from '../App'
@@ -14,7 +15,7 @@ import type { SortField, TransactionQuery } from '../domain/filters'
 import { totals } from '../domain/calculations'
 import { parseAmountToCents } from '../domain/money'
 import { formatDate, relativeDayLabel, todayIso } from '../domain/dates'
-import { IconFilter, IconInbox, IconPlus, IconSearch } from '../components/icons'
+import { IconInbox, IconPlus, IconSearch } from '../components/icons'
 import { cn } from '../lib/cn'
 import type { TransactionType } from '../domain/types'
 
@@ -145,20 +146,12 @@ export function TransactionsPage() {
             </div>
 
             <div className="flex gap-2">
-              <Button
-                variant={showFilters ? 'subtle' : 'secondary'}
-                onClick={() => setShowFilters((v) => !v)}
-                aria-expanded={showFilters}
-                aria-controls="transaction-filters"
-              >
-                <IconFilter className="h-3.5 w-3.5" />
-                Filters
-                {filterCount > 0 ? (
-                  <Badge tone="accent" className="ml-0.5">
-                    {filterCount}
-                  </Badge>
-                ) : null}
-              </Button>
+              <FilterToggleButton
+                open={showFilters}
+                onToggle={() => setShowFilters((v) => !v)}
+                count={filterCount}
+                controls="transaction-filters"
+              />
 
               <div className="min-w-[9.5rem]">
                 <label htmlFor="tx-sort" className="sr-only absolute h-px w-px overflow-hidden">
@@ -180,121 +173,29 @@ export function TransactionsPage() {
           </div>
 
           {showFilters ? (
-            <div
-              id="transaction-filters"
-              className="grid gap-3 rounded-lg border border-line bg-surface-muted/40 p-3 sm:grid-cols-2 lg:grid-cols-4"
-            >
-              <Field label="Type" htmlFor="filter-type">
-                <Select
-                  id="filter-type"
-                  value={type}
-                  onChange={(e) => setType(e.target.value as TransactionType | 'all')}
-                >
-                  <option value="all">All types</option>
-                  <option value="expense">Expenses</option>
-                  <option value="income">Income</option>
-                  <option value="transfer">Transfers</option>
-                </Select>
-              </Field>
-
-              <Field
-                label="Category"
-                htmlFor="filter-category"
-                hint={type === 'transfer' ? 'Transfers have no category.' : undefined}
-              >
-                <Select
-                  id="filter-category"
-                  value={categoryId}
-                  onChange={(e) => setCategoryId(e.target.value)}
-                  disabled={type === 'transfer'}
-                  aria-describedby={type === 'transfer' ? 'filter-category-hint' : undefined}
-                >
-                  <option value="">All categories</option>
-                  <optgroup label="Spending">
-                    {data.categories
-                      .filter((c) => c.type === 'expense')
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Income">
-                    {data.categories
-                      .filter((c) => c.type === 'income')
-                      .map((c) => (
-                        <option key={c.id} value={c.id}>
-                          {c.name}
-                        </option>
-                      ))}
-                  </optgroup>
-                </Select>
-              </Field>
-
-              <Field label="Account" htmlFor="filter-account">
-                <Select
-                  id="filter-account"
-                  value={accountId}
-                  onChange={(e) => setAccountId(e.target.value)}
-                >
-                  <option value="">All accounts</option>
-                  {data.accounts.map((a) => (
-                    <option key={a.id} value={a.id}>
-                      {a.name}
-                    </option>
-                  ))}
-                </Select>
-              </Field>
-
-              <Field label="From" htmlFor="filter-from">
-                <Input
-                  id="filter-from"
-                  type="date"
-                  value={from}
-                  max={to || undefined}
-                  onChange={(e) => setFrom(e.target.value)}
-                />
-              </Field>
-
-              <Field label="To" htmlFor="filter-to">
-                <Input
-                  id="filter-to"
-                  type="date"
-                  value={to}
-                  min={from || undefined}
-                  onChange={(e) => setTo(e.target.value)}
-                />
-              </Field>
-
-              <Field label="Minimum amount" htmlFor="filter-min">
-                <Input
-                  id="filter-min"
-                  inputMode="decimal"
-                  value={minAmount}
-                  prefix={format.symbol}
-                  placeholder="0.00"
-                  onChange={(e) => setMinAmount(e.target.value)}
-                />
-              </Field>
-
-              <Field label="Maximum amount" htmlFor="filter-max">
-                <Input
-                  id="filter-max"
-                  inputMode="decimal"
-                  value={maxAmount}
-                  prefix={format.symbol}
-                  placeholder="No limit"
-                  onChange={(e) => setMaxAmount(e.target.value)}
-                />
-              </Field>
-
-              {filterCount > 0 ? (
-                <div className="sm:col-span-2 lg:col-span-4">
-                  <Button variant="ghost" size="sm" onClick={clearFilters}>
-                    Clear all filters
-                  </Button>
-                </div>
-              ) : null}
+            <div id="transaction-filters">
+              <TransactionFilterFields
+                idPrefix="filter"
+                type={type}
+                onTypeChange={setType}
+                categoryId={categoryId}
+                onCategoryChange={setCategoryId}
+                accountId={accountId}
+                onAccountChange={setAccountId}
+                from={from}
+                onFromChange={setFrom}
+                to={to}
+                onToChange={setTo}
+                minAmount={minAmount}
+                onMinAmountChange={setMinAmount}
+                maxAmount={maxAmount}
+                onMaxAmountChange={setMaxAmount}
+                categories={data.categories}
+                accounts={data.accounts}
+                currencySymbol={format.symbol}
+                filterCount={filterCount}
+                onClear={clearFilters}
+              />
             </div>
           ) : null}
 

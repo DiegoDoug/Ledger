@@ -17,7 +17,15 @@
  */
 export type TransactionType = 'income' | 'expense' | 'transfer'
 
-export type AccountType = 'checking' | 'savings' | 'credit' | 'cash' | 'investment' | 'other'
+export type AccountType =
+  | 'checking'
+  | 'savings'
+  | 'credit'
+  | 'cash'
+  | 'investment'
+  | 'prepaid'
+  | 'virtual'
+  | 'other'
 
 export type Frequency = 'weekly' | 'monthly' | 'yearly'
 
@@ -148,6 +156,8 @@ export const ACCOUNT_TYPES: AccountType[] = [
   'credit',
   'cash',
   'investment',
+  'prepaid',
+  'virtual',
   'other',
 ]
 
@@ -157,6 +167,8 @@ export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
   credit: 'Credit card',
   cash: 'Cash',
   investment: 'Investment',
+  prepaid: 'Prepaid card',
+  virtual: 'Virtual card',
   other: 'Other',
 }
 

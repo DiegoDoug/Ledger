@@ -8,6 +8,7 @@
 
 import {
   addMonthsToKey,
+  daysBetween,
   formatMonthLabel,
   isValidIso,
   monthEnd,
@@ -104,6 +105,20 @@ export function resolvePeriod(
     default:
       return build(current, current)
   }
+}
+
+/**
+ * A sensible starting period given how much history actually exists, so a
+ * ledger three days old doesn't default into a six-month window that is
+ * almost entirely empty. Manual selection via `PERIOD_OPTIONS` always
+ * remains available — this only picks the initial value.
+ */
+export function defaultPeriodId(earliest: IsoDate | undefined, today: IsoDate): PeriodId {
+  if (!earliest) return 'this-month'
+  const days = daysBetween(earliest, today)
+  if (days < 30) return 'this-month'
+  if (days < 90) return 'last-3-months'
+  return 'last-6-months'
 }
 
 /** The equivalent-length window immediately before `period`, for comparisons. */
